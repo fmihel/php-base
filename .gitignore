@@ -1,0 +1,4 @@
+.vscode
+/vendor/
+debug/
+tests/data/configBase.php
