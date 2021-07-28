@@ -945,6 +945,72 @@ class Base{
 
         return true;
     }
+
+     /** Эквивален Oracle CONNECT BY PRIOR
+     * Ф-ция работает не совсем как в Oracle, в Oracle сначала создаться полный список по связке  prior (по всему дереву), 
+     * а к выводу пойдут лишь те, что удовлктворяют внутреннему where
+     * А данной ф-ции, если указать внутренний where то дерево может не быть построено до конца, так как нужные строки будут отфильтрованы
+     * на этапе запроса. Так что лучше сначала построить дерево, а потом полученный список отфильтровать
+     *  
+     * @param {string} - запрос без where
+     * @param {string} - where для поиска первой строки
+     * @param {string} - where для поиска дочерних элементов, для ссылки на родительский элемент использовать префикс prior.FIELD_NAME
+     * @param {string} - алиас базы
+     * @param {string} - кодировка   
+     * 
+     * Examples:    
+     * tabel NAMES
+     * id own name   age
+     * 1  0   mike   12  
+     * 2  1   aaa    12
+     * 3  1   bbb    7 
+     * 4  2   ccc    12
+     * 
+     * connect_by_prior('select * from NAMES n','n.id=1','n.age>10 and n.own=prior.id','deco','utf8');
+     * >> 1  0   mike   12  
+     * >> 2  1   aaa    12
+     * >> 4  2   ccc    12
+     *  
+    */
+    public static function connect_by_prior(string $sql,string $start,string $prior,string $base=null,$coding='utf8'):array{
+        $out = [];
+        // поиск первой строки
+        $q=$sql.' where '.$start;
+        $ds = self::ds($q,$base,$coding);
+        
+        if (!self::isEmpty($ds)){
+
+            $out[] = self::read($ds);
+
+            // список полей
+            $fields = self::fields($ds,true);
+            usort($fields,function($a,$b){
+                return strlen($a)<strlen($b);
+            }); // уопрядочим по убыванию длины имени
+            $priorFields = array_map(function($item){return 'prior.'.$item;},$fields);// список полей к замене 
+            // шаблон для поиска след уровня
+            $templ=$sql.' where '.$prior;  
+
+            $childs = self::_connect_by_prior($out[0],$templ,$fields,$priorFields,$base,$coding);
+            $out = array_merge($out,$childs);
+        }
+        
+        return $out;
+    }
+    private static function _connect_by_prior($current,$templ,$fields,$priorFields,$base,$coding):array{
+        $out = [];
+        $values = array_map(function($name) use ($current){return $current[$name];},$fields);   
+        $q = str_replace($priorFields,$values, $templ);
+        $ds = self::ds($q,$base,$coding);
+        while($row = self::read($ds)){
+            $out[]=$row;
+            
+            $childs = self::_connect_by_prior($row,$templ,$fields,$priorFields,$base,$coding);
+            if (count($childs)>0)
+                $out= array_merge($out,$childs);
+        }
+        return $out;
+    }
 };
 
 
