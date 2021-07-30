@@ -1011,6 +1011,66 @@ class Base{
         }
         return $out;
     }
+
+
+    public static function prepare($template,$base){
+        $db = self::db($base);
+        return $db->prepare($template);
+    }
+
+    public static function execute($templateOrPrepare,$base,$format,...$values){
+    
+        $prepare =  (gettype($templateOrPrepare) === 'string' ? self::prepare($templateOrPrepare,$base):$templateOrPrepare);
+        $prepare->bind_param($format,...$values);
+        $prepare->execute();
+        return $prepare;
+
+    }
+
+    public static function preparing(string $sql,array $FieldNameValue=[]):array{
+        $re = '/(\?[A-Za-z\_0-9]+)/m';
+        preg_match_all($re, $sql, $matches, PREG_SET_ORDER, 0);
+        $vars = [];
+        foreach($matches as $m)
+            $vars[]=$m[0];    
+        $sql = str_replace($vars,'?',$sql);
+        
+
+        $format = '';
+        $values = [];
+        foreach($vars as $var){
+            $name = mb_substr($var,1);
+            if( !isset($FieldNameValue[$name]))
+                throw new \Exception(" not exists $name in FieldNameValue");
+            $value = $FieldNameValue[$name];
+            $type = 's';
+            if (gettype($value)==='array'){
+                $vt = $value[1];
+                if ($vt==='string')
+                    $type = 's';
+                if (($vt==='int') || ($vt==='integer'))
+                    $type = 'i';
+                if (($vt==='float') || ($vt==='double'))
+                    $type = 'd';
+                if (($vt==='blob'))
+                    $type = 'b';
+                $value = $value[0];
+            }else{
+                if (is_numeric($value)){
+                    if (strpos($value,'.')===false)
+                        $type = 'i';
+                    else    
+                        $type = 'd';
+                }
+            }
+            $format.=$type;
+            $values[]=$value;
+                
+        }
+
+        return ['sql'=>$sql,'format'=>$format,'values'=>$values];
+    }
+
 };
 
 
