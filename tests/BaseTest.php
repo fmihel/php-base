@@ -379,6 +379,101 @@ final class BaseTest extends TestCase{
 
     }
 
+    public function test_preparing(){
+
+        // --------------------------------------------
+        $q = 'select * from TEST where ID_TEST=?ID_TEST and NAME=?NAME';
+        $fv = ['ID_TEST'=>'1.3','NAME'=>'Mike'];
+        $format = ['ID_TEST'=>'float','NAME'=>'int'];
+        $res = Base::preparing($q,$fv,$format);
+        self::assertTrue($res['sql'] === 'select * from TEST where ID_TEST=? and NAME=?');
+        self::assertTrue($res['format'] === 'di');
+        self::assertTrue($res['values'][0] == '1.3');
+        self::assertTrue($res['values'][1] == 'Mike');
+
+        // --------------------------------------------
+        $q = 'select * from TEST where ID_TEST=?ID_TEST and NAME=?NAME';
+        $fv = ['ID_TEST'=>1.3,'NAME'=>'Mike'];
+        $format = ['ID_TEST'=>'s'];
+        $res = Base::preparing($q,$fv,$format);
+        self::assertTrue($res['sql'] === 'select * from TEST where ID_TEST=? and NAME=?');
+        self::assertTrue($res['format'] === 'ss');
+        self::assertTrue($res['values'][0] == '1.3');
+        self::assertTrue($res['values'][1] == 'Mike');
+        // --------------------------------------------
+        $q = 'select * from TEST where ID_TEST=?ID_TEST and NAME=?NAME';
+        $fv = ['ID_TEST'=>[1,'int'],'NAME'=>'Mike'];
+        $res = Base::preparing($q,$fv);
+        self::assertTrue($res['sql'] === 'select * from TEST where ID_TEST=? and NAME=?');
+        self::assertTrue($res['format'] === 'is');
+        self::assertTrue($res['values'][0] == '1');
+        self::assertTrue($res['values'][1] == 'Mike');
+        // --------------------------------------------            
+        $q = 'select * from TEST where ID_TEST=?ID_TEST and NAME=?NAME';
+        $fv = ['ID_TEST'=>1,'NAME'=>'Mike'];
+        $res = Base::preparing($q,$fv);
+        self::assertTrue($res['sql'] === 'select * from TEST where ID_TEST=? and NAME=?');
+        self::assertTrue($res['format'] === 'is');
+        self::assertTrue($res['values'][0] == '1');
+        self::assertTrue($res['values'][1] == 'Mike');
+        // --------------------------------------------            
+        $q = 'select * from TEST where ID_TEST=?ID_TEST and NAME=?NAME';
+        $fv = ['ID_TEST'=>'1','NAME'=>'Mike'];
+        $res = Base::preparing($q,$fv);
+        self::assertTrue($res['sql'] === 'select * from TEST where ID_TEST=? and NAME=?');
+        self::assertTrue($res['format'] === 'ss');
+        self::assertTrue($res['values'][0] == '1');
+        self::assertTrue($res['values'][1] == 'Mike');
+        // --------------------------------------------            
+        $q = 'select * from TEST where ID_TEST=?ID_TEST and NAME=?NAME';
+        $fv = ['ID_TEST'=>1.3,'NAME'=>'Mike'];
+        $res = Base::preparing($q,$fv);
+        self::assertTrue($res['sql'] === 'select * from TEST where ID_TEST=? and NAME=?');
+        self::assertTrue($res['format'] === 'ds');
+        self::assertTrue($res['values'][0] == '1.3');
+        self::assertTrue($res['values'][1] == 'Mike');
+        // --------------------------------------------            
+        $q = 'select * from TEST where ID_TEST=?ID_TEST and NAME=?NAME';
+        $fv = ['ID_TEST'=>[1.3,'s'],'NAME'=>'Mike'];
+        $res = Base::preparing($q,$fv);
+        self::assertTrue($res['sql'] === 'select * from TEST where ID_TEST=? and NAME=?');
+        self::assertTrue($res['format'] === 'ss');
+        self::assertTrue($res['values'][0] == '1.3');
+        self::assertTrue($res['values'][1] == 'Mike');
+        // --------------------------------------------            
+    }
+     /**
+     * @depends test_connect
+     */    
+    public function test_execute(){
+
+        // --------------------------------------------
+        $prep = Base::preparing(
+            'update '.TABLE_FILL.' set NAME=?NAME,AGE=?AGE where ID_CLIENT=?ID_CLIENT',
+            ['ID_CLIENT'=>2,'NAME'=>'Mike','AGE'=>['22','i']]
+        );
+        $res = Base::execute($prep,'test');
+        self::assertTrue( true );
+        // --------------------------------------------
+        $prep = Base::preparing(
+            'update '.TABLE_FILL.' set NAME=?NAME,AGE=?AGE where ID_CLIENT=?ID_CLIENT',
+            ['ID_CLIENT'=>2,'NAME'=>'Mike','AGE'=>33],
+            ['ID_CLIENT'=>'i','AGE'=>'integer','NAME'=>'s']
+        );
+        Base::startTransaction('test');
+        $res = Base::execute($prep,'test');
+        Base::rollback('test');
+        self::assertTrue( true );
+        // --------------------------------------------
+        $prep = Base::preparing(
+            'update '.TABLE_FILL.' set NAME=?NAME,AGE=?AGE where ID_CLIENT=?ID_CLIENT',
+            ['ID_CLIENT'=>'3','NAME'=>'Nomad','AGE'=>'33333'],
+            ['AGE'=>'i','ID_CLIENT'=>'i']
+        );
+        $res = Base::execute($prep,'test');
+        self::assertTrue( true );
+        // --------------------------------------------
+    }
     protected static function doPrivateStaticMethod($className,$name,...$args) {
         $class = new \ReflectionClass($className);
         $method = $class->getMethod($name);

@@ -1,6 +1,7 @@
 <?php
 namespace fmihel\base;
 
+use fmihel\console;
 
 class Base{
 
@@ -542,8 +543,10 @@ class Base{
     public static function startTransaction($base){
         $b = self::getbase($base);
         
-        if ($b->transaction==0)
-            $b->db->autocommit(false);    
+        if ($b->transaction==0){
+           //$b->db->autocommit(false);    
+           $b->db->begin_transaction();
+        }
         $b->transaction+=1;
         return true;
     }
@@ -912,19 +915,10 @@ class Base{
     */
     public static function update(string $base,string $tableName,array $data,string $where,$coding = null){
         
-        Base::startTransaction($base);
-
-        try {
-            $types  = self::getTypes($tableName,$base);
-            $q      = self::generate('update',$tableName,$data,['types'=>$types,'where'=>$where]);
+        $types  = self::getTypes($tableName,$base);
+        $q      = self::generate('update',$tableName,$data,['types'=>$types,'where'=>$where]);
             
-            Base::query($q,$base);
-            Base::commit($base);
-
-        } catch (\Exception $e) {
-            Base::rollback($base);
-            throw $e;
-        };
+        Base::query($q,$base);
         return true;
 
     }
@@ -1015,19 +1009,77 @@ class Base{
 
     public static function prepare($template,$base){
         $db = self::db($base);
-        return $db->prepare($template);
+        $res = $db->prepare($template);
+        if ($res === false)
+            throw new BaseException('mysqli::prepare=false (template:'.print_r($template).')');
+        return $res;
     }
-
-    public static function execute($templateOrPrepare,$base,$format,...$values){
+    /** выполняет запрос по шаблону 
+     *  Ex:
+     *  Base::execute('update TEST set NAME=? where ID_TEST=?','xxx','si','Mike',1);
+     * 
+     *  Ex: 
+     *  $q = 'update TEST set NAME=?NAME where ID_TEST=?ID_TEST';
+     *  $prep = Base::preparing($q,['ID_TEST'=>1,'NAME'=>'Mike'])
+     *  Base::execute($prep['sql'],'xxx',$prep['format'],...$prep['values]);
+     *  or 
+     *  Base::execute($prep,'xxx');
+     * 
+    */
+    public static function execute($templateOrPrepare,$base,$format='',...$values){
+        try {
+            if (gettype($templateOrPrepare) === 'array'){
+                $format = $templateOrPrepare['format'];
+                $values = $templateOrPrepare['values'];
+                $templateOrPrepare = $templateOrPrepare['sql'];
+            };
     
-        $prepare =  (gettype($templateOrPrepare) === 'string' ? self::prepare($templateOrPrepare,$base):$templateOrPrepare);
-        $prepare->bind_param($format,...$values);
-        $prepare->execute();
-        return $prepare;
+            $prepare =  (gettype($templateOrPrepare) === 'string' ? self::prepare($templateOrPrepare,$base) : $templateOrPrepare );
+            $prepare->bind_param($format,...$values);
+            if (!$prepare->execute())
+                throw new BaseException('mysqli::execute = false');
+            
+            return $prepare;
+                
+        } catch (\Exception $e) {
+            throw $e;
+        };
 
     }
 
-    public static function preparing(string $sql,array $FieldNameValue=[]):array{
+    private static function _prepFormat(string $vt){
+        if ($vt==='string' || $vt==='s')
+            return 's';
+        if (($vt==='int') || ($vt==='integer') || ($vt === 'i'))
+            return 'i';
+        if (($vt==='float') || ($vt==='double') || ($vt === 'f') || ($vt === 'd'))
+            return 'd';
+        if (($vt==='blob') || ($vt==='b'))
+            return 'b';
+        return false;
+    }
+    /** Обработка шаблона запроса 
+     *  Ex1:
+     *  $q = 'select * from TEST where ID_TEST = ?ID_TEST and NAME=?NAME';
+     *  $fields = ['ID_TEST'=>1,'NAME'=>'Mike']
+     *  $res = Base::preparing($q,$fields);
+     * 
+     *  result:
+     *  $res['sql']  -  'select * from TEST where ID_TEST=? and NAME=?'
+     *  $res['format'] - 'is'
+     *  $res['values] - [1,'Mike']
+     * 
+     *  Ex2:
+     *  $q = 'select * from TEST where ID_TEST = ?ID_TEST and NAME=?NAME';
+     *  $fields = ['ID_TEST'=>[1,'int'],'NAME'=>'Mike']
+     *  $res = Base::preparing($q,$fields);
+     * 
+     *  result:
+     *  $res['sql']  -  'select * from TEST where ID_TEST=? and NAME=?'
+     *  $res['format'] - 'is'
+     *  $res['values] - [1,'Mike']
+    */
+    public static function preparing(string $sql,array $FieldNameValue=[],$FieldFormat=[]):array{
         $re = '/(\?[A-Za-z\_0-9]+)/m';
         preg_match_all($re, $sql, $matches, PREG_SET_ORDER, 0);
         $vars = [];
@@ -1043,26 +1095,31 @@ class Base{
             if( !isset($FieldNameValue[$name]))
                 throw new \Exception(" not exists $name in FieldNameValue");
             $value = $FieldNameValue[$name];
-            $type = 's';
-            if (gettype($value)==='array'){
-                $vt = $value[1];
-                if ($vt==='string')
-                    $type = 's';
-                if (($vt==='int') || ($vt==='integer'))
-                    $type = 'i';
-                if (($vt==='float') || ($vt==='double'))
-                    $type = 'd';
-                if (($vt==='blob'))
-                    $type = 'b';
-                $value = $value[0];
-            }else{
-                if (is_numeric($value)){
-                    if (strpos($value,'.')===false)
-                        $type = 'i';
-                    else    
-                        $type = 'd';
+            
+            $type = false;
+            if (isset($FieldFormat[$name]))
+                $type=self::_prepFormat($FieldFormat[$name]);
+
+            if ($type===false){
+                if (gettype($value)==='array'){
+                    $vt = $value[1];
+                    $type = self::_prepFormat($vt);
+                    $value = $value[0];
+                }else{
+                    if (!is_string($value)){
+                        if (is_numeric($value)){
+                            if (strpos($value,'.')===false)
+                                $type = 'i';
+                            else    
+                                $type = 'd';
+                        }
+                    }
                 }
             }
+            
+            if ($type === false)
+                $type = 's';
+
             $format.=$type;
             $values[]=$value;
                 
