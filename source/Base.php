@@ -1015,33 +1015,33 @@ class Base{
         return $res;
     }
     /** выполняет запрос по шаблону 
-     *  Ex:
-     *  Base::execute('update TEST set NAME=? where ID_TEST=?','xxx','si','Mike',1);
      * 
      *  Ex: 
      *  $q = 'update TEST set NAME=?NAME where ID_TEST=?ID_TEST';
-     *  $prep = Base::preparing($q,['ID_TEST'=>1,'NAME'=>'Mike'])
-     *  Base::execute($prep['sql'],'xxx',$prep['format'],...$prep['values]);
-     *  or 
-     *  Base::execute($prep,'xxx');
+     *  $prep = Base::preparing('update TEST set NAME=?NAME where ID_TEST=?ID_TEST',['ID_TEST'=>1,'NAME'=>'Mike'])
+
+     *  Base::execute($prep,'xxx','utf8');
      * 
     */
-    public static function execute($templateOrPrepare,$base,$format='',...$values){
+    public static function execute(array $preparing,$base=null,$coding=null){
+
+        $charSet = self::charSet($base);
         try {
-            if (gettype($templateOrPrepare) === 'array'){
-                $format = $templateOrPrepare['format'];
-                $values = $templateOrPrepare['values'];
-                $templateOrPrepare = $templateOrPrepare['sql'];
-            };
-    
-            $prepare =  (gettype($templateOrPrepare) === 'string' ? self::prepare($templateOrPrepare,$base) : $templateOrPrepare );
-            $prepare->bind_param($format,...$values);
+            if (isset($preparing['sql']))
+                $prepare =  self::prepare($preparing['sql'],$base);
+            else
+                $prepare = $preparing['prepare'];
+
+            $prepare->bind_param($preparing['format'],...$preparing['values']);
             if (!$prepare->execute())
                 throw new BaseException('mysqli::execute = false');
             
+            self::charSet($base,$charSet);
             return $prepare;
                 
         } catch (\Exception $e) {
+
+            self::charSet($base,$charSet);
             throw $e;
         };
 
