@@ -1026,6 +1026,7 @@ class Base{
     public static function execute(array $preparing,$base=null,$coding=null){
 
         $charSet = self::charSet($base);
+        self::charSet($base,$coding);
         try {
             if (isset($preparing['sql']))
                 $prepare =  self::prepare($preparing['sql'],$base);
