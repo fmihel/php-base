@@ -13,13 +13,27 @@ define('TABLE_EMPTY','test_clients_phone');
 // test_clients_phone - is empty
 //  ------------------------
 
+const DS_ROWS  = [
+    ['id'=>1,"NAME"=>'bbbb',"AGE"=>2,'ID_CLIENT'=>1],
+    ['id'=>2,"NAME"=>'Soma',"AGE"=>43,'ID_CLIENT'=>2],
+    ['id'=>3,"NAME"=>'Keks',"AGE"=>78,'ID_CLIENT'=>3],
+    ['id'=>4,"NAME"=>'Pretor',"AGE"=>5,'ID_CLIENT'=>4],
+
+];
+
 final class BaseTest extends TestCase{
 
     public static function setUpBeforeClass(): void
     {
         require_once(__DIR__.'/data/configBase.php');
         Base::connect($config);
-
+        
+        foreach(DS_ROWS as $row){
+            $q = Base::generate('insertOnDuplicate',TABLE_FILL,$row,
+                ['types'=>Base::getTypes(TABLE_FILL,'test'),'exclude'=>'id']
+            );
+            Base::query($q,'test','utf8');
+        };
     }    
     public function test_connect(){
         $connect = Base::connect('test');
@@ -115,8 +129,8 @@ final class BaseTest extends TestCase{
     public function test_charSet(){
         // ------------------------------
         // charset is not set
-        $cs = Base::charSet('test');
-        self::assertSame($cs,'');
+        //$cs = Base::charSet('test');
+        //self::assertSame($cs,'');
         // ------------------------------
         // first set charset (cant restory)
         Base::charSet('test','utf8');
@@ -350,6 +364,10 @@ final class BaseTest extends TestCase{
      * @depends test_connect
      */    
     public function test_update(){
+
+        // --------------------------------------------
+        $res = Base::update('test', TABLE_FILL , ['NAME'=>200,'AGE'=>100,'bron'=>333] ,'ID_CLIENT=33');
+        self::assertTrue( $res );
         // --------------------------------------------
         $res = Base::update('test', TABLE_FILL , ['NAME'=>200,'AGE'=>100] ,'ID_CLIENT=32');
         self::assertTrue( $res );
@@ -357,6 +375,7 @@ final class BaseTest extends TestCase{
         $this->expectException(\Exception::class);
         $res = Base::update('test', TABLE_FILL , ['NAME'=>200,'AGE'=>100] ,'ID_CLIENTS=33');
         // --------------------------------------------
+        
     }
 
     public function test_haveKeys(){

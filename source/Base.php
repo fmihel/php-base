@@ -916,8 +916,8 @@ class Base{
     public static function update(string $base,string $tableName,array $data,string $where,$coding = null){
         
         $types  = self::getTypes($tableName,$base);
-        $q      = self::generate('update',$tableName,$data,['types'=>$types,'where'=>$where]);
-            
+        $include = array_keys($types);
+        $q      = self::generate('update',$tableName,$data,['types'=>$types,'where'=>$where,'include'=>$include]);
         Base::query($q,$base);
         return true;
 
