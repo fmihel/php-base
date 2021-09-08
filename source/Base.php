@@ -8,6 +8,7 @@ class Base{
     static private $_base = array();
     static private $_codings = array();
     static private $_types = array();
+    static private $_fieldsInfo = [];
     /** connect to base
      * @param string | array $server server name or ['server'=>...,'user'=>...,...]
      * @param string $user -   user name
@@ -64,7 +65,8 @@ class Base{
         
         $_db = new _db();
         $_db->db = $db;
-        
+        $_db->alias  = $alias;
+
         self::$_base[$alias]=$_db;
         
         return true;
@@ -136,7 +138,7 @@ class Base{
         
         if (count(self::$_base)===0) {
             if ($exception)
-                throw new BaseException("no have initializing base");
+                throw new BaseException("no have initializing base = $base");
             return false;
         }   
         
@@ -279,6 +281,7 @@ class Base{
             'text'      =>'string',
             'float'     =>'float',
             'decimal'   =>'float',
+            'double'    =>'float',
             'datetime'  =>'date',
             'timestamp' =>'date',
             'blob'      =>'blob',
@@ -296,7 +299,21 @@ class Base{
      *  short = 'types' список [поле=>тип,...]
      *  short = false|'full' полную информацию [ [Fiel=>'name',Type=>'string',...], ..] ]
     */
-    public static function fieldsInfo($tableName,$base,$short=true){
+    public static function fieldsInfo($tableName,$base=null,$short=true,$refresh=false){
+        
+        $shortIndex = 'short';
+        if ($short===false || $short === 'full')
+            $shortIndex = 'full';
+        if ($short==='types')
+            $shortIndex = 'types';
+                    
+        $db = self::getbase($base);
+        $base = $db->alias;
+
+        if (!$refresh && isset(self::$_fieldsInfo[$base][$tableName][$shortIndex]))
+            return self::$_fieldsInfo[$base][$tableName][$shortIndex];
+        
+        
         $out = [];
         
         $q = 'SHOW COLUMNS FROM `'.$tableName.'`';
@@ -313,7 +330,14 @@ class Base{
             }
             
         }
-            
+        
+        if (!isset(self::$_fieldsInfo[$base]))
+            self::$_fieldsInfo[$base]=[$tableName=>[$shortIndex=>null]];
+        if (!isset(self::$_fieldsInfo[$base][$tableName]))
+            self::$_fieldsInfo[$base][$tableName]=[$shortIndex=>null];
+        
+
+        self::$_fieldsInfo[$base][$tableName][$shortIndex] = $out;
         return $out;    
         
     }

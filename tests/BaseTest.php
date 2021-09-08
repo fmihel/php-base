@@ -493,6 +493,32 @@ final class BaseTest extends TestCase{
         self::assertTrue( true );
         // --------------------------------------------
     }
+    /**
+     * @depends test_connect
+     */    
+    public function test_fieldsInfo(){
+        $fields = [
+            'ID_CLIENT'=>'int',
+            'NAME'=>'string',
+            'AGE'=>'int',
+            'LAST_MODIFY'=>'date',
+            'SUM'=>'float',
+            'UUID'=>'string',
+        ];
+
+        // --------------------------------------------
+        $short = array_keys($fields);
+        $info = Base::fieldsInfo(TABLE_FILL,'test');
+        self::assertSame($info,$short);
+        // --------------------------------------------
+        $info = Base::fieldsInfo(TABLE_FILL,'test','types');
+        self::assertSame( $info,$fields);
+        // --------------------------------------------
+        $info = Base::fieldsInfo(TABLE_FILL,'test','types');
+        self::assertSame( $info,$fields);
+        
+    }
+
     protected static function doPrivateStaticMethod($className,$name,...$args) {
         $class = new \ReflectionClass($className);
         $method = $class->getMethod($name);
