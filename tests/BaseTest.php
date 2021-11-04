@@ -57,7 +57,7 @@ final class BaseTest extends TestCase{
     /**
      * @depends test_ds
      */    
-    public function test_fields(){
+    public function ztest_fields(){
         // ------------------------------
         // charset is not set
         $q = 'select * from '.TABLE_FILL;
@@ -517,6 +517,22 @@ final class BaseTest extends TestCase{
         $info = Base::fieldsInfo(TABLE_FILL,'test','types');
         self::assertSame( $info,$fields);
         
+    }
+    /**
+     * @depends test_connect
+     */    
+    public function test_rows(){
+
+        $q = 'select * from '.TABLE_FILL;
+        $rows = Base::rows($q,'test','utf8',function($row,$i){
+            if ($row['ID_CLIENT'] != 3)
+                return false;
+            $row['BUBU'] = 'b-'.rand(100,200);    
+            return $row;
+        });
+        // console::table($rows);
+        self::assertTrue( count($rows)<=1 );
+
     }
 
     protected static function doPrivateStaticMethod($className,$name,...$args) {

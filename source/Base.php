@@ -499,12 +499,34 @@ class Base{
         
         return $ds->fetch_assoc();
     }
-    
-    public static function rows($sqlOrDs,$base=null,$coding=null){
+    /** возвращает список строк запроса, 
+     * @param {string || dataset} запрос или датасет
+     * @param {string} алиас базы
+     * @param {string} кодировка
+     * @param {function} ф-ция вызываемая для каждой строки списка, должна вернуть измененную строку либо false, тогда строки не будет в выходном списке 
+     * Ex:
+     *  $rows = Base::rows('select ID_CLIENT,AGE,SUM from CLIENTS','base','utf8',function($row,$i){
+     *              if ($row['AGE']>20) // только старше 20
+     *                  return false;
+     *              $row['SUM'] += 10; // изменяем поле
+     *              $row['NEW_FIELD'] = rand(100,200); // добавляем новое поле
+     *              return $row;
+     *         });
+     */
+    public static function rows($sqlOrDs,$base=null,$coding=null,$filter=false){
         $out = [];
         $ds = gettype($sqlOrDs)==='string'?self::ds($sqlOrDs,$base,$coding):$sqlOrDs;
-        while($row = self::read($ds))
-            array_push($out,$row);
+        $row_num = 0;
+        while($row = self::read($ds)){
+            
+            if ($filter){
+                $row = $filter($row,$row_num);
+                $row_num +=1;
+            }
+            if ($row)
+                $out[]=$row;
+            
+        }
         return $out;
     }
     
