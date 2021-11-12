@@ -964,7 +964,7 @@ class Base{
         $types  = self::getTypes($tableName,$base);
         $include = array_keys($types);
         $q      = self::generate('update',$tableName,$data,['types'=>$types,'where'=>$where,'include'=>$include]);
-        Base::query($q,$base);
+        Base::query($q,$base,$coding);
         return true;
 
     }
