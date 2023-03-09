@@ -1131,7 +1131,10 @@ class Base{
         preg_match_all($re, $sql, $matches, PREG_SET_ORDER, 0);
         $vars = [];
         foreach($matches as $m)
-            $vars[]=$m[0];    
+            $vars[]=$m[0];
+        
+        usort($vars,function($a,$b){ return strlen($a)<strlen($b);});// упорядочиваем по длине строки, на случай совпадений начальных букв        
+
         $sql = str_replace($vars,'?',$sql);
         
 
