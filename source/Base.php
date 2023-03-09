@@ -1133,9 +1133,11 @@ class Base{
         foreach($matches as $m)
             $vars[]=$m[0];
         
-        usort($vars,function($a,$b){ return strlen($a)<strlen($b);});// упорядочиваем по длине строки, на случай совпадений начальных букв        
 
-        $sql = str_replace($vars,'?',$sql);
+        // упорядочиваем по длине строки, на случай совпадений начальных букв        
+        $order = array_merge($vars);      
+        usort($order,function($a,$b){ return strlen($a)<strlen($b);});
+        $sql = str_replace($order,'?',$sql);
         
 
         $format = '';
