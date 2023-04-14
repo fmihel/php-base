@@ -1,6 +1,8 @@
 <?php
 namespace fmihel\base;
 
+use fmihel\console;
+
 class Base
 {
 
@@ -1252,10 +1254,7 @@ class Base
             $vars[] = $m[0];
         }
 
-        // упорядочиваем по длине строки, на случай совпадений начальных букв
-        $order = array_merge($vars);
-        usort($order, function ($a, $b) {return strlen($a) < strlen($b);});
-        $sql = str_replace($order, '?', $sql);
+        $sql = str_replace($vars, '?', $sql);
 
         $format = '';
         $values = [];
@@ -1302,5 +1301,55 @@ class Base
 
         return ['sql' => $sql, 'format' => $format, 'values' => $values];
     }
+    /** клонирует строку таблицы */
+    public static function cloneRecord($tableName, $where, $base, $params = [])
+    {
+        $params = array_merge([
+            'include' => [], // [field,field]
+            'exclude' => [], // [field,field]
+            'coding' => null,
+            'UUID-NAME' => 'UUID',
+            'UUID-SIZE' => 32,
+            'return' => '*',
+        ], $params);
 
+        $all = self::fieldsInfo($tableName, $base, true);
+        $include = (gettype($params['include']) !== 'array' || count($params['include']) === 0) ? $all : $params['include'];
+        $exclude = (gettype($params['exclude']) !== 'array') ? [] : $params['exclude'];
+        $fields = [];
+
+        $have_uuid = (array_search($params['UUID-NAME'], $all) !== false && $params['UUID-NAME']);
+        if ($have_uuid && array_search($params['UUID-NAME'], $include) === false) {
+            $include[] = $params['UUID-NAME'];
+        }
+
+        foreach ($include as $field) {
+            if (array_search($field, $exclude) === false) {
+                $fields[] = '`' . $field . '`';
+            }
+        }
+
+        $insert = implode(',', $fields);
+        $select = $insert;
+
+        if ($have_uuid) {
+            $uuid = self::uuid($params['UUID-SIZE']);
+            $select = str_replace('`' . $params['UUID-NAME'] . '`', '"' . $uuid . '"', $select);
+        }
+
+        $q = 'insert into `' . $tableName . '` (' . $insert . ') select ' . $select . ' from ' . $tableName . ' where ' . $where;
+        console::log($q);
+        //self::query($q, $base, $params['coding']);
+
+        if ($have_uuid) {
+
+            $re = $params['return'];
+            $q = 'select ' . (gettype($re) === 'array' ? implode(',', $re) : $re) . ' from `' . $tableName . '` where `' . $params['UUID-NAME'] . '` = "' . $uuid . '"';
+            console::log($q);
+            //return Base::row($q, $base, $params['coding']);
+
+        }
+
+        return [];
+    }
 };
