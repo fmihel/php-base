@@ -1,8 +1,6 @@
 <?php
 namespace fmihel\base;
 
-use fmihel\console;
-
 class Base
 {
 
@@ -1301,16 +1299,22 @@ class Base
 
         return ['sql' => $sql, 'format' => $format, 'values' => $values];
     }
-    /** клонирует строку таблицы */
+    /** клонирует строку таблицы
+     * @param {string} tableName - имя таблицы
+     * @param {string} where - условие в запросе SQL для выбора копируемой строки (Ex: `ID_ORDER = 10 and ARCH <> 1`)
+     * @param {string} base - имя базы
+     * @param {array} params - набор дополнительных параметров
+     * @return {array} массив с клонируемыми данными ,если существует UUID в противном случае - []
+     */
     public static function cloneRecord($tableName, $where, $base, $params = [])
     {
         $params = array_merge([
-            'include' => [], // [field,field]
-            'exclude' => [], // [field,field]
-            'coding' => null,
-            'UUID-NAME' => 'UUID',
-            'UUID-SIZE' => 32,
-            'return' => '*',
+            'include' => [], // [field,field] // включаемые поля для копирования ( если ничего не задать беруться все)
+            'exclude' => [], // [field,field] // исключаемые поля из списка включаемых
+            'coding' => null, // кодировка
+            'UUID-NAME' => 'UUID', // имя уникального поля для начальной идентификации
+            'UUID-SIZE' => 32, // размер поля начальной идентификации
+            'return' => '*', // список возвращаемых полей (будет возвращен, если существует поле UUID-NAME)
         ], $params);
 
         $all = self::fieldsInfo($tableName, $base, true);
@@ -1338,15 +1342,14 @@ class Base
         }
 
         $q = 'insert into `' . $tableName . '` (' . $insert . ') select ' . $select . ' from ' . $tableName . ' where ' . $where;
-        console::log($q);
-        //self::query($q, $base, $params['coding']);
+        self::query($q, $base, $params['coding']);
 
         if ($have_uuid) {
 
             $re = $params['return'];
             $q = 'select ' . (gettype($re) === 'array' ? implode(',', $re) : $re) . ' from `' . $tableName . '` where `' . $params['UUID-NAME'] . '` = "' . $uuid . '"';
-            console::log($q);
-            //return Base::row($q, $base, $params['coding']);
+
+            return Base::row($q, $base, $params['coding']);
 
         }
 
