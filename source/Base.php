@@ -1252,9 +1252,9 @@ class Base
             $vars[] = $m[0];
         }
         // выстроить переменные в порядке убывания, для нормального срабатывания str_replace
-        usort($vars, function ($a, $b) {return strlen($a) < strlen($b);});
-
-        $sql = str_replace($vars, '?', $sql);
+        $to_replace = array_merge($vars);
+        usort($to_replace, function ($a, $b) {return strlen($a) < strlen($b);});
+        $sql = str_replace($to_replace, '?', $sql);
 
         $format = '';
         $values = [];
