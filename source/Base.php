@@ -1251,6 +1251,8 @@ class Base
         foreach ($matches as $m) {
             $vars[] = $m[0];
         }
+        // выстроить переменные в порядке убывания, для нормального срабатывания str_replace
+        usort($vars, function ($a, $b) {return strlen($a) < strlen($b);});
 
         $sql = str_replace($vars, '?', $sql);
 
