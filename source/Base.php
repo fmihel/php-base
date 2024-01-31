@@ -4,10 +4,14 @@ namespace fmihel\base;
 class Base
 {
 
-    private static $_base = array();
-    private static $_codings = array();
-    private static $_types = array();
+    private static $_base = [];
+    private static $_codings = [];
+    private static $_types = [];
     private static $_fieldsInfo = [];
+    private static $stat_enable = false;
+    private static $stat = [
+        'count' => [],
+    ];
     /** connect to base
      * @param string | array $server server name or ['server'=>...,'user'=>...,...]
      * @param string $user -   user name
@@ -197,6 +201,10 @@ class Base
                 self::charSet($base, $coding);
                 $change_coding = true;
             }
+
+            if (self::$stat_enable) {
+                self::stat_query_count($sql);
+            };
 
             $res = $db->query($sql);
 
@@ -1158,6 +1166,11 @@ class Base
     public static function prepare($template, $base)
     {
         $db = self::db($base);
+
+        if (self::$stat_enable) {
+            self::stat_query_count($template);
+        };
+
         $res = $db->prepare($template);
         if ($res === false) {
             throw new BaseException('mysqli::prepare=false (template:' . print_r($template) . ')');
@@ -1357,4 +1370,75 @@ class Base
 
         return [];
     }
+    public static function exists($sql, $base): bool
+    {
+        if (strpos(strtoupper($sql), 'LIMIT ') === false) {
+            $sql = $sql . ' limit 1';
+        };
+        $ds = self::ds($sql, $base);
+        return $ds && $ds->num_rows > 0;
+    }
+    /** вкл/выкл ркежим записи статистики */
+    public static function stat_enable($set = null): bool
+    {
+        if (!is_null($set)) {
+            self::$stat_enable = !!$set;
+        }
+        return self::$stat_enable;
+    }
+    /** вкл/выкл ркежим записи статистики */
+    private static function stat_count($msg)
+    {
+        if (self::$stat_enable) {
+            if (isset(self::$stat['count'][$msg])) {
+                self::$stat['count'][$msg] = ++self::$stat['count'][$msg];
+            } else {
+                self::$stat['count'][$msg] = 1;
+            }
+        }
+    }
+    private static function stat_query_count($query)
+    {
+        $upper = strtoupper(trim($query));
+        $commands = ['SELECT', 'INSERT', 'UPDATE', 'CREATE', 'DROP', 'ALTER', 'SHOW', 'USE', 'SECRIBE', 'DELETE'];
+        $max = -1;
+        $msg = false;
+        foreach ($commands as $com) {
+            $pos = strpos($upper, $com);
+            if ($pos !== false) {
+                if ($max === -1) {
+                    $max = $pos;
+                    $msg = $com;
+                } else {
+                    if ($pos < $max) {
+                        $max = $pos;
+                        $msg = $com;
+                    }
+                }
+            }
+        };
+        if ($msg === 'SELECT') {
+            $re = '/SELECT[\s\S]+FROM\s+(\S+)/m';
+            preg_match_all($re, $upper, $matches, PREG_SET_ORDER, 0);
+            $msg = 'SELECT ' . $matches[0][1];
+        };
+        self::stat_count($msg ? $msg : trim(substr(trim($query), 0, 10)));
+
+    }
+
+    public static function stat_str($br = "\n"): string
+    {
+        $out = '';
+        $all = 0;
+        foreach (self::$stat['count'] as $msg => $count) {
+            $out .= $br . $msg . ':' . $count;
+            $all += $count;
+        }
+        if ($all > 0) {
+            $out .= ($out ? $br : '') . 'all:' . $all;
+        }
+
+        return $out;
+    }
+
 };
