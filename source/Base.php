@@ -1326,18 +1326,22 @@ class Base
         $params = array_merge([
             'include' => [], // [field,field] // включаемые поля для копирования ( если ничего не задать беруться все)
             'exclude' => [], // [field,field] // исключаемые поля из списка включаемых
+            'change' => [], //[field=>value,...] // поля, которые будут заменены
             'coding' => null, // кодировка
             'UUID-NAME' => 'UUID', // имя уникального поля для начальной идентификации
             'UUID-SIZE' => 32, // размер поля начальной идентификации
             'return' => '*', // список возвращаемых полей (будет возвращен, если существует поле UUID-NAME)
         ], $params);
 
-        $all = self::fieldsInfo($tableName, $base, true);
-        $include = (gettype($params['include']) !== 'array' || count($params['include']) === 0) ? $all : $params['include'];
+        $types = self::fieldsInfo($tableName, $base, 'types');
+
+        //$all = self::fieldsInfo($tableName, $base, true);
+        $types = self::fieldsInfo($tableName, $base, 'types');
+        $include = (gettype($params['include']) !== 'array' || count($params['include']) === 0) ? array_keys($types) : $params['include'];
         $exclude = (gettype($params['exclude']) !== 'array') ? [] : $params['exclude'];
         $fields = [];
 
-        $have_uuid = (array_search($params['UUID-NAME'], $all) !== false && $params['UUID-NAME']);
+        $have_uuid = (isset($types[$params['UUID-NAME']]) !== false && $params['UUID-NAME']);
         if ($have_uuid && array_search($params['UUID-NAME'], $include) === false) {
             $include[] = $params['UUID-NAME'];
         }
@@ -1356,7 +1360,15 @@ class Base
             $select = str_replace('`' . $params['UUID-NAME'] . '`', '"' . $uuid . '"', $select);
         }
 
+        if (!empty($params['change'])) {
+            foreach ($params['change'] as $name => $val) {
+                $val = self::typePerform($val, $types[$name]);
+                $select = str_replace('`' . $name . '`', $val, $select);
+            }
+        }
+
         $q = 'insert into `' . $tableName . '` (' . $insert . ') select ' . $select . ' from ' . $tableName . ' where ' . $where;
+
         self::query($q, $base, $params['coding']);
 
         if ($have_uuid) {
