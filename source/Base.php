@@ -12,6 +12,20 @@ class Base
     private static $stat = [
         'count' => [],
     ];
+
+    private static $promise = [];
+
+    public static function connect_promise(string $server, string $user, string $pass, string $baseName, string $alias, $die = true)
+    {
+        self::$promise[$alias] = [
+            'server' => $server,
+            'user' => $user,
+            'pass' => $pass,
+            'baseName' => $baseName,
+            'die' => $die,
+            'alias' => $alias,
+        ];
+    }
     /** connect to base
      * @param string | array $server server name or ['server'=>...,'user'=>...,...]
      * @param string $user -   user name
@@ -100,7 +114,7 @@ class Base
      * base::charSet('mybase','restory');
      *
      */
-    public static function charSet($base = null, $coding = null)
+    public static function charSet($base, $coding = null)
     {
 
         if ((gettype($coding) === 'string')) {
@@ -146,31 +160,34 @@ class Base
         }
     }
     /**  return base or raise Exception */
-    private static function getbase($base, $exception = true)
+    private static function getbase($base)
     {
-
-        if (count(self::$_base) === 0) {
-            if ($exception) {
+        // try {
+        if (is_null($base)) {
+            throw new \Exception('base is null');
+        }
+        if (empty(self::$_base) || (!isset(self::$_base[$base]))) {
+            if (!isset(self::$promise[$base])) {
                 throw new BaseException("no have initializing base = $base");
             }
-
-            return false;
+            self::connect(self::$promise[$base]);
         }
 
-        $keys = array_keys(self::$_base);
-        if (is_null($base)) {
-            $base = $keys[0];
-        }
+        // $keys = array_keys(self::$_base);
+        // if (is_null($base)) {
+        //     $base = $keys[0];
+        // }
 
         if (isset(self::$_base[$base])) {
             return self::$_base[$base];
         }
 
-        if ($exception) {
-            throw new BaseException("base $base is not exists");
-        }
+        throw new BaseException("base $base is not exists");
 
-        return false;
+        // } catch (\Exception $e) {
+        //     console::error($e);
+        //     throw $e;
+        // };
 
     }
     /** return db object as ref to base */
@@ -230,7 +247,6 @@ class Base
      */
     public static function ds($sql, $base, $coding = null)
     {
-
         $ds = self::query($sql, $base, $coding);
         $ds->data_seek(0);
         return $ds;
@@ -250,7 +266,7 @@ class Base
      * если задать countFieldName, то будет искать соответсвтвующее поле и выдаст его значение
      * можно задать countFieldName как число, тогда это будет номер необходимого поля
      */
-    public static function count($sqlOrDs, $base = null, $countFieldName = '')
+    public static function count($sqlOrDs, $base, $countFieldName = '')
     {
 
         $ds = gettype($sqlOrDs) === 'string' ? self::ds($sqlOrDs, $base, null) : $sqlOrDs;
@@ -302,7 +318,7 @@ class Base
         return $res;
 
     }
-    public static function haveField($field, $tableName, $base = null)
+    public static function haveField($field, $tableName, $base)
     {
         $list = self::fieldsInfo($tableName, $base, true);
         return (array_search($field, $list) !== false);
@@ -340,7 +356,7 @@ class Base
      *  short = 'types' список [поле=>тип,...]
      *  short = false|'full' полную информацию [ [Fiel=>'name',Type=>'string',...], ..] ]
      */
-    public static function fieldsInfo($tableName, $base = null, $short = true, $refresh = false)
+    public static function fieldsInfo($tableName, $base, $short = true, $refresh = false)
     {
 
         $shortIndex = 'short';
@@ -681,7 +697,7 @@ class Base
         return false;
     }
 
-    public static function rollback($base = null)
+    public static function rollback($base)
     {
         $b = self::getbase($base);
 
@@ -1012,7 +1028,7 @@ class Base
         return $res . ' ' . $CR;
     }
 
-    public static function real_escape($string, $base = null)
+    public static function real_escape($string, $base)
     {
         $db = self::db($base);
         if (!$db) {
@@ -1119,7 +1135,7 @@ class Base
      * >> 4  2   ccc    12
      *
      */
-    public static function connect_by_prior(string $sql, string $start, string $prior, string $base = null, $coding = 'utf8'): array
+    public static function connect_by_prior(string $sql, string $start, string $prior, string $base, $coding = 'utf8'): array
     {
         $out = [];
         // поиск первой строки
@@ -1187,7 +1203,7 @@ class Base
      *  Base::execute($prep,'xxx','utf8');
      *
      */
-    public static function execute(array $preparing, $base = null, $coding = null)
+    public static function execute(array $preparing, $base, $coding = null)
     {
 
         $charSet = self::charSet($base);
