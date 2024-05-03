@@ -1,10 +1,13 @@
 <?php
 namespace fmihel\base;
 
+require_once __DIR__ . '/DB.php';
+require_once __DIR__ . '/BaseException.php';
+
 class Base
 {
 
-    private static $_base = [];
+    private static $bases = [];
     private static $_codings = [];
     private static $_types = [];
     private static $_fieldsInfo = [];
@@ -14,77 +17,45 @@ class Base
     ];
 
     private static $promise = [];
-
-    public static function connect_promise(string $server, string $user, string $pass, string $baseName, string $alias, $die = true)
+    /** отложенное подключение.
+     *  Подключение будет только при выполнении какого-либо запроса к соотвествующей базе
+     */
+    public static function lazy_connect(string $server, string $user, string $pass, string $baseName, string $alias)
     {
         self::$promise[$alias] = [
             'server' => $server,
             'user' => $user,
             'pass' => $pass,
             'baseName' => $baseName,
-            'die' => $die,
             'alias' => $alias,
         ];
     }
     /** connect to base
-     * @param string | array $server server name or ['server'=>...,'user'=>...,...]
+     * @param string $server server name
      * @param string $user -   user name
      * @param string $pass -  password
      * @param string $baseName - base name
      * @param string $alias - alias for base
-     * @param bool $die - if true then exit from script if connect error
      * @return bool
      */
-    public static function connect($server, $user = '', $pass = '', $baseName = '', $alias = '', $die = true)
+    public static function connect(string $server, string $user, string $pass, string $baseName, string $alias): bool
     {
 
-        if (gettype($server) === 'array') {
-
-            $p = array_merge([
-                'server' => '',
-                'user' => '',
-                'pass' => '',
-                'base' => '',
-                'alias' => '',
-                'die' => true,
-            ], $server);
-
-            $server = $p['server'];
-            $user = $p['user'];
-            $pass = $p['pass'];
-            $baseName = $p['baseName'];
-            $alias = $p['alias'];
-            $die = $p['die'];
-
-        };
-
-        if (($server !== '') && ($user === '') && ($pass === '') && ($baseName === '') && ($alias === '')) {
-            return isset(self::$_base[$server]) ? true : false;
+        if (($server === '') || ($user === '') || ($pass === '') || ($baseName === '') || ($alias === '')) {
+            throw new BaseException('Base::connect(..) - not all parameters are specified.');
         }
 
-        if (isset(self::$_base[$alias])) {
+        if (isset(self::$bases[$alias])) {
             return true;
         }
 
         $db = new \mysqli($server, $user, $pass, $baseName);
 
         if ($db->connect_errno) {
-            $msg = "can`t connect to MySQL: (" . $db->connect_errno . ") " . $db->connect_error;
-            if ($die === 'exception') {
-                throw new BaseException($msg);
-            } elseif ($die) {
-                echo $msg;
-                exit;
-            }
-
-            return false;
+            throw new BaseException("Base::connect(..)  - can`t connect to MySQL (" . $db->connect_errno . ") " . $db->connect_error);
         }
 
-        $_db = new _db();
-        $_db->db = $db;
-        $_db->alias = $alias;
-
-        self::$_base[$alias] = $_db;
+        self::$bases[$alias] = new DB($db, $alias, $baseName);
 
         return true;
 
@@ -92,12 +63,9 @@ class Base
     /** disconnect from base */
     public static function disconnect($base)
     {
-
-        if (isset(self::$_base[$base])) {
-
-            unset($base);
+        if (isset(self::$bases[$base])) {
+            unset($bases[$base]);
         }
-
     }
     /** set or return charset
      *
@@ -114,7 +82,7 @@ class Base
      * base::charSet('mybase','restory');
      *
      */
-    public static function charSet($base, $coding = null)
+    public static function charSet(string $base, $coding = null)
     {
 
         if ((gettype($coding) === 'string')) {
@@ -159,44 +127,53 @@ class Base
 
         }
     }
-    /**  return base or raise Exception */
-    private static function getbase($base)
+
+    private static $storyCharSet = null;
+    private static function storyCharSet($base, $newCoding)
     {
-        // try {
-        if (is_null($base)) {
-            throw new \Exception('base is null');
+        if ($newCoding) {
+            self::$storyCharSet = self::charSet($base);
+            self::charSet($base, $newCoding);
+        };
+    }
+    private static function restoryCharSet($base)
+    {
+        if (self::$storyCharSet) {
+            self::charSet($base, self::$storyCharSet);
+            self::$storyCharSet = null;
         }
-        if (empty(self::$_base) || (!isset(self::$_base[$base]))) {
-            if (!isset(self::$promise[$base])) {
-                throw new BaseException("no have initializing base = $base");
+    }
+    /**  return base or raise Exception */
+    private static function getbase(string $base)
+    {
+        if (isset(self::$bases[$base])) {
+            return self::$bases[$base];
+        }
+
+        foreach (self::$bases as $db) {
+            if ($db->baseName === $base) {
+                return $db;
             }
-            self::connect(self::$promise[$base]);
         }
 
-        // $keys = array_keys(self::$_base);
-        // if (is_null($base)) {
-        //     $base = $keys[0];
-        // }
+        if (isset(self::$promise[$base])) {
+            $promise = self::$promise[$base];
+            if (self::connect($promise['server'], $promise['user'], $promise['pass'], $promise['baseName'], $promise['alias'])) {
+                return self::$bases[$base];
+            };
 
-        if (isset(self::$_base[$base])) {
-            return self::$_base[$base];
         }
 
         throw new BaseException("base $base is not exists");
 
-        // } catch (\Exception $e) {
-        //     console::error($e);
-        //     throw $e;
-        // };
-
     }
-    /** return db object as ref to base */
-    private static function db($base)
+    /** return mysqli object  */
+    private static function db(string $base)
     {
         return self::getbase($base)->db;
     }
     /** return error of base */
-    public static function error($base)
+    public static function error(string $base)
     {
         $_base = self::getbase($base);
         if ($_base) {
@@ -206,18 +183,11 @@ class Base
         return '';
     }
 
-    public static function query($sql, $base, $coding = null)
+    public static function query(string $sql, string $base, $coding = null)
     {
-
+        self::storyCharSet($base, $coding);
         $db = self::db($base);
-
         try {
-            $change_coding = false;
-            if (!is_null($coding)) {
-                $story = self::charSet($base);
-                self::charSet($base, $coding);
-                $change_coding = true;
-            }
 
             if (self::$stat_enable) {
                 self::stat_query_count($sql);
@@ -227,16 +197,14 @@ class Base
 
             if ($res === false) {
                 throw new BaseException($sql, $base);
-            }
+            };
 
         } catch (\Exception $e) {
-            if ($change_coding && (!is_null($coding))) {
-                self::charSet($base, $story);
-            }
-
+            self::restoryCharSet($base);
             throw $e;
         };
 
+        self::restoryCharSet($base);
         return $res;
 
     }
@@ -245,15 +213,12 @@ class Base
      * @return  false - если ошибка
      * @return object - если запрос выполнен
      */
-    public static function ds($sql, $base, $coding = null)
+    public static function ds(string $sql, string $base, $coding = null)
     {
         $ds = self::query($sql, $base, $coding);
         $ds->data_seek(0);
         return $ds;
     }
-    /**
-     *
-     */
     public static function assign($ds)
     {
         return (gettype($ds) === 'object');
@@ -266,32 +231,34 @@ class Base
      * если задать countFieldName, то будет искать соответсвтвующее поле и выдаст его значение
      * можно задать countFieldName как число, тогда это будет номер необходимого поля
      */
-    public static function count($sqlOrDs, $base, $countFieldName = '')
+    public static function count(string $sql, string $base, $FieldNameOrIndex = '')
     {
+        return self::count_ds(self::ds($sql, $base), $FieldNameOrIndex);
+    }
+    /** Возвращает кол-во записей запроса в ds
+     * если задать countFieldName, то будет искать соответсвтвующее поле и выдаст его значение
+     * можно задать countFieldName как число, тогда это будет номер необходимого поля
+     */
+    public static function count_ds($ds, $FieldNameOrIndex = null)
+    {
+        $type = gettype($FieldNameOrIndex);
 
-        $ds = gettype($sqlOrDs) === 'string' ? self::ds($sqlOrDs, $base, null) : $sqlOrDs;
-        if (!$ds) {
-            throw new BaseException('can`t get ds from sqlOrDs =  ' . print_r($sqlOrDs, true), $base);
-        }
-
-        $type = gettype($countFieldName);
-
-        if (($countFieldName != '') || ($type === 'integer')) {
+        if (($FieldNameOrIndex != '') || ($type === 'integer')) {
             $fields = self::fields($ds);
 
             if ($type === 'integer') {
-                $row = self::row($ds);
-                return intval($row[$fields[$countFieldName]]);
+                $row = self::row_ds($ds);
+                return intval($row[$fields[$FieldNameOrIndex]]);
             } else {
                 $fields = self::fields($ds);
-                $countFieldName = strtoupper(trim($countFieldName));
+                $FieldNameOrIndex = strtoupper(trim($$FieldNameOrIndex));
                 foreach ($fields as $name) {
                     if (
-                        (strtoupper(trim($name)) === $countFieldName)
+                        (strtoupper(trim($name)) === $FieldNameOrIndex)
                         ||
-                        (strpos(strtoupper(trim($name)), $countFieldName . '(') === 0)
+                        (strpos(strtoupper(trim($name)), $FieldNameOrIndex . '(') === 0)
                     ) {
-                        $row = self::row($ds);
+                        $row = self::row_ds($ds);
                         return intval($row[$name]);
                     }
                 }
@@ -302,23 +269,19 @@ class Base
     }
 
     /** список таблиц */
-    public static function tables($base)
+    public static function tables(string $base)
     {
         $res = [];
-
         $q = 'SHOW TABLES';
         $ds = self::ds($q, $base);
         while ($row = self::read($ds)) {
             foreach ($row as $field => $table) {
                 array_push($res, $table);
             }
-
         };
-
         return $res;
-
     }
-    public static function haveField($field, $tableName, $base)
+    public static function haveField(string $field, string $tableName, string $base)
     {
         $list = self::fieldsInfo($tableName, $base, true);
         return (array_search($field, $list) !== false);
@@ -356,7 +319,7 @@ class Base
      *  short = 'types' список [поле=>тип,...]
      *  short = false|'full' полную информацию [ [Fiel=>'name',Type=>'string',...], ..] ]
      */
-    public static function fieldsInfo($tableName, $base, $short = true, $refresh = false)
+    public static function fieldsInfo(string $tableName, string $base, $short = true, $refresh = false)
     {
 
         $shortIndex = 'short';
@@ -561,17 +524,20 @@ class Base
     /** возвращает текущую строку
      * если строки закончились или их нет, то возвращает NULL
      */
-    public static function row($sqlOrDs, $base = null, $coding = null)
+    public static function row(string $sql, string $base, $coding = null)
     {
+        return self::row_ds(self::ds($sql, $base, $coding));
+    }
 
-        $ds = gettype($sqlOrDs) === 'string' ? self::ds($sqlOrDs, $base, $coding) : $sqlOrDs;
-
+    public static function row_ds($ds)
+    {
         if (self::isEmpty($ds)) {
             return null;
         }
 
         return $ds->fetch_assoc();
     }
+
     /** возвращает список строк запроса,
      * @param {string || dataset} запрос или датасет
      * @param {string} алиас базы
@@ -586,10 +552,13 @@ class Base
      *              return $row;
      *         });
      */
-    public static function rows($sqlOrDs, $base = null, $coding = null, $filter = false)
+    public static function rows(string $sql, string $base, $coding = null, $filter = false): array
+    {
+        return self::rows_ds(self::ds($sql, $base, $coding), $filter);
+    }
+    public static function rows_ds($ds, $filter = false): array
     {
         $out = [];
-        $ds = gettype($sqlOrDs) === 'string' ? self::ds($sqlOrDs, $base, $coding) : $sqlOrDs;
         $row_num = 0;
         while ($row = self::read($ds)) {
 
@@ -600,7 +569,6 @@ class Base
             if ($row) {
                 $out[] = $row;
             }
-
         }
         return $out;
     }
@@ -619,7 +587,7 @@ class Base
         return $ds->fetch_assoc();
     }
 
-    public static function value($sql, $base, $param = [])
+    public static function value(string $sql, string $base, array $param = [])
     {
         $p = array_merge([
             'field' => '',
@@ -638,7 +606,6 @@ class Base
                 if (preg_match('/\s+limit\s+[0-9]+[\s\S]*\Z/m', $sql) !== 1) {
                     $sql .= ' limit 1';
                 }
-
             }
 
             $ds = self::ds($sql, $base, $coding);
@@ -655,7 +622,7 @@ class Base
                 throw new BaseException('result of [' . $sql . '] is empty', $base);
             }
 
-            $row = self::row($ds);
+            $row = self::row_ds($ds);
             return $row[$field];
 
         } catch (\Exception $e) {
@@ -667,7 +634,7 @@ class Base
         return $default;
     }
 
-    public static function startTransaction($base)
+    public static function startTransaction(string $base): bool
     {
         $b = self::getbase($base);
 
@@ -679,7 +646,7 @@ class Base
         return true;
     }
 
-    public static function commit($base)
+    public static function commit(string $base): bool
     {
         $b = self::getbase($base);
 
@@ -697,7 +664,7 @@ class Base
         return false;
     }
 
-    public static function rollback($base)
+    public static function rollback(string $base): bool
     {
         $b = self::getbase($base);
 
@@ -735,7 +702,7 @@ class Base
         return chr($code);
     }
 
-    public static function uuid($count = 32)
+    public static function uuid(int $count = 32)
     {
         $uuid = '';
         for ($i = 0; $i < $count; $i++) {
@@ -745,20 +712,20 @@ class Base
         return $uuid;
     }
 
-    public static function insert_uuid($table, $index, $base, $fieldUUID = 'UUID', $countUUID = 32)
+    public static function insert_uuid(string $table, string $indexField, string $base, string $fieldUUID = 'UUID', int $countUUID = 32)
     {
         $uuid = self::uuid($countUUID);
 
         $q = 'insert into `' . $table . '` set `' . $fieldUUID . "` = '" . $uuid . "'";
         self::query($q, $base);
 
-        $q = 'select `' . $index . '` from `' . $table . '` where `' . $fieldUUID . "`='" . $uuid . "'";
-        return self::value($q, $base, ['field' => $index]);
+        $q = 'select `' . $indexField . '` from `' . $table . '` where `' . $fieldUUID . "`='" . $uuid . "'";
+        return self::value($q, $base, ['field' => $indexField]);
 
     }
 
     /** преобоазует значение к представлеию в SQL запросе в зависимости от его типа */
-    public static function typePerform($value, $type)
+    public static function typePerform($value, string $type)
     {
 
         if (($type === 'string') || ($type === 'date')) {
@@ -787,7 +754,7 @@ class Base
      *
      * @return string|bool    вернет либо запрос, либо false если ни одного поля не было добавлено в запрос
      */
-    public static function generate($queryType, $table, $data, $param = [])
+    public static function generate(string $queryType, string $table, array $data, array $param = [])
     {
 
         $types = isset($param['types']) ? $param['types'] : [];
@@ -942,7 +909,7 @@ class Base
     }
 
     /** преобразуем данные из $param в список полей для формирования запроса sql */
-    public static function fieldsToSQL($param)
+    public static function fieldsToSQL(array $param): string
     {
 
         $exclude = isset($param['exclude']) ? $param['exclude'] : array();
@@ -1028,18 +995,12 @@ class Base
         return $res . ' ' . $CR;
     }
 
-    public static function real_escape($string, $base)
+    public static function real_escape(string $string, string $base): string
     {
-        $db = self::db($base);
-        if (!$db) {
-            return $string;
-        } else {
-            return $db->real_escape_string($string);
-        }
-
+        return self::db($base)->real_escape_string($string);
     }
 
-    public static function esc($string)
+    public static function esc(string $string): string
     {
         $from = array('"');
         $to = array('\"');
@@ -1048,9 +1009,8 @@ class Base
     /** заменяет параметры типа :FIELDNAME в $sql , на их значение value из $FeildNameValue=['FIELDNAME'=>value]
      *  тк же можно задать $value [VALUE,TYPE] либо указать в $param['types'=>]
      */
-    public static function paramToSql(string $sql, array $FieldNameValue = [], array $param = [])
+    public static function paramToSql(string $sql, array $FieldNameValue = [], array $param = []): string
     {
-
         $param = array_merge([
             'types' => [],
         ], $param);
@@ -1080,7 +1040,7 @@ class Base
     /** внесение изменений в таблицу
      * @return {boolean || Exception}
      */
-    public static function update(string $base, string $tableName, array $data, string $where, $coding = null)
+    public static function update(string $base, string $tableName, array $data, string $where, $coding = null): bool
     {
 
         $types = self::getTypes($tableName, $base);
@@ -1135,7 +1095,7 @@ class Base
      * >> 4  2   ccc    12
      *
      */
-    public static function connect_by_prior(string $sql, string $start, string $prior, string $base, $coding = 'utf8'): array
+    public static function connect_by_prior(string $sql, string $start, string $prior, string $base, string $coding = 'utf8'): array
     {
         $out = [];
         // поиск первой строки
@@ -1161,7 +1121,7 @@ class Base
 
         return $out;
     }
-    private static function _connect_by_prior($current, $templ, $fields, $priorFields, $base, $coding): array
+    private static function _connect_by_prior($current, $templ, array $fields, array $priorFields, string $base, string $coding): array
     {
         $out = [];
         $values = array_map(function ($name) use ($current) {return $current[$name];}, $fields);
@@ -1179,7 +1139,7 @@ class Base
         return $out;
     }
 
-    public static function prepare($template, $base)
+    public static function prepare(string $template, string $base)
     {
         $db = self::db($base);
 
@@ -1203,7 +1163,7 @@ class Base
      *  Base::execute($prep,'xxx','utf8');
      *
      */
-    public static function execute(array $preparing, $base, $coding = null)
+    public static function execute(array $preparing, string $base, $coding = null)
     {
 
         $charSet = self::charSet($base);
@@ -1337,7 +1297,7 @@ class Base
      * @param {array} params - набор дополнительных параметров
      * @return {array} массив с клонируемыми данными ,если существует UUID в противном случае - []
      */
-    public static function cloneRecord($tableName, $where, $base, $params = [])
+    public static function cloneRecord(string $tableName, string $where, string $base, array $params = [])
     {
         $params = array_merge([
             'include' => [], // [field,field] // включаемые поля для копирования ( если ничего не задать беруться все)
@@ -1398,7 +1358,7 @@ class Base
 
         return [];
     }
-    public static function exists($sql, $base): bool
+    public static function exists(string $sql, string $base): bool
     {
         if (strpos(strtoupper($sql), 'LIMIT ') === false) {
             $sql = $sql . ' limit 1';
@@ -1425,7 +1385,7 @@ class Base
             }
         }
     }
-    private static function stat_query_count($query)
+    private static function stat_query_count(string $query)
     {
         $upper = strtoupper(trim($query));
         $commands = ['SELECT', 'INSERT', 'UPDATE', 'CREATE', 'DROP', 'ALTER', 'SHOW', 'USE', 'SECRIBE', 'DELETE'];
@@ -1454,7 +1414,7 @@ class Base
 
     }
 
-    public static function stat_str($br = "\n"): string
+    public static function stat_str(string $br = "\n"): string
     {
         $out = '';
         $all = 0;
