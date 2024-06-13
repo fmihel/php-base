@@ -57,6 +57,10 @@ class Base
 
         self::$bases[$alias] = new DB($db, $alias, $baseName);
 
+        // $requ = print_r($_REQUEST, true);
+        // error_log($_SERVER['REMOTE_ADDR'] . ' ' . str_replace(["\n", '  ', '  ', 'Array '], [' ', '', '', ''], strlen($requ) > 150 ? substr($requ, 0, 150) . '..' : $requ));
+        // error_log(str_replace("\n", ' ', print_r(array_merge(self::show_status('deco'), self::show_variables('deco')), true)));
+
         return true;
 
     }
@@ -1443,8 +1447,13 @@ class Base
         $names = empty($vars) ? ['Aborted_connects', 'Threads_connected', 'Max_used_connections'] : $vars;
         $fields = array_map(function ($item) {return "'$item'";}, $names);
         $q = "show status where Variable_name in (" . implode(',', $fields) . ");";
-        return self::rows($q, 'deco');
 
+        $out = [];
+        self::rows($q, 'deco', 'utf8', function ($it) use (&$out) {
+            $out[$it['Variable_name']] = $it['Value'];
+        });
+
+        return $out;
     }
 
     public static function show_variables(string $base, array $vars = []): array
@@ -1453,7 +1462,13 @@ class Base
         $names = empty($vars) ? ['max_user_connections'] : $vars;
         $fields = array_map(function ($item) {return "'$item'";}, $names);
         $q = "show variables where Variable_name in (" . implode(',', $fields) . ");";
-        return self::rows($q, 'deco');
+
+        $out = [];
+        self::rows($q, 'deco', 'utf8', function ($it) use (&$out) {
+            $out[$it['Variable_name']] = $it['Value'];
+        });
+
+        return $out;
 
     }
 
