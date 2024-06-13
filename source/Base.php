@@ -64,9 +64,18 @@ class Base
     public static function disconnect($base)
     {
         if (isset(self::$bases[$base])) {
-            unset($bases[$base]);
+            self::db($base)->close();
+            unset(self::$bases[$base]);
         }
     }
+
+    public static function disconnectAll()
+    {
+        foreach (self::$bases as $base) {
+            self::disconnect($base->alias);
+        }
+    }
+
     /** set or return charset
      *
      * example set default charset
@@ -1374,7 +1383,6 @@ class Base
         }
         return self::$stat_enable;
     }
-    /** вкл/выкл ркежим записи статистики */
     private static function stat_count($msg)
     {
         if (self::$stat_enable) {
@@ -1427,6 +1435,26 @@ class Base
         }
 
         return $out;
+    }
+
+    public static function show_status(string $base, array $vars = []): array
+    {
+
+        $names = empty($vars) ? ['Aborted_connects', 'Threads_connected', 'Max_used_connections'] : $vars;
+        $fields = array_map(function ($item) {return "'$item'";}, $names);
+        $q = "show status where Variable_name in (" . implode(',', $fields) . ");";
+        return self::rows($q, 'deco');
+
+    }
+
+    public static function show_variables(string $base, array $vars = []): array
+    {
+
+        $names = empty($vars) ? ['max_user_connections'] : $vars;
+        $fields = array_map(function ($item) {return "'$item'";}, $names);
+        $q = "show variables where Variable_name in (" . implode(',', $fields) . ");";
+        return self::rows($q, 'deco');
+
     }
 
 };
